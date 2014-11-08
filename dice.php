@@ -43,7 +43,8 @@ class Dice {
 		
 		if (is_callable($callback, true)) call_user_func_array($callback, array($params));
 		
-		$object = (count($params) > 0) ? (new \ReflectionClass($className))->newInstanceArgs($params) : new $className;
+		$reflect = new \ReflectionClass($className);
+		$object = (count($params) > 0) ? $reflect->newInstanceArgs($params) : new $className;
 		if ($rule->shared == true) $this->instances[strtolower($component)] = $object;
 		foreach ($rule->call as $call) call_user_func_array(array($object, $call[0]), $this->getMethodParams($className, $call[0], $rule, array_merge($this->getParams($call[1]), $args)));
 		return $object;
@@ -59,7 +60,8 @@ class Dice {
 	
 	private function getMethodParams($className, $method, Rule $rule, array $args = array(), array $share = array()) {
 		if (!method_exists($className, $method)) return array();
-		$params = (new \ReflectionMethod($className, $method))->getParameters();
+		$reflect = new \ReflectionMethod($className, $method);
+		$params = $reflect->getParameters();
 		$parameters = array();
 		foreach ($params as $param) {			
 			foreach ($args as $argName => $arg) {
