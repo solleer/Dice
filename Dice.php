@@ -31,18 +31,8 @@ class Dice {
 	 * @param array $rule The container can be fully configured using rules provided by associative arrays. See {@link https://r.je/dice.html#example3} for a description of the rules.
 	 */
 	public function addRule(string $name, array $rule): self {
-		//Clear any existing instance or cache for this class
-		unset($this->instances[$name], $this->cache[$name]);
-
-		if (isset($rule['instanceOf']) && (!array_key_exists('inherit', $rule) || $rule['inherit'] === true )) {
-			$rule = array_replace_recursive($this->getRule($rule['instanceOf']), $rule);
-		}
-		//Allow substitutions rules to be defined with a leading a slash
-		if (isset($rule['substitutions'])) foreach($rule['substitutions'] as $key => $value) $rule['substitutions'][ltrim($key,  '\\')] = $value;
-
 		$dice = clone $this;
-		$dice->rules[ltrim(strtolower($name), '\\')] = array_replace_recursive($dice->getRule($name), $rule);
-
+		$this->addRuleTo($dice, $name, $rule);
 		return $dice;
 	 }
 
@@ -52,10 +42,20 @@ class Dice {
 	*/
 	public function addRules($rules): self {
 		if (is_string($rules)) $rules = json_decode(file_get_contents($rules), true);
-		$dice = $this;
-		foreach ($rules as $name => $rule) $dice = $dice->addRule($name, $rule);
+		$dice = clone $this;
+		foreach ($rules as $name => $rule) $this->addRuleTo($dice,$name, $rule);
 		return $dice;
 	}
+
+	private function addRuleTo(Dice $dice, string $name, array $rule) {
+        if (isset($rule['instanceOf']) && (!array_key_exists('inherit', $rule) || $rule['inherit'] === true ))
+            $rule = array_replace_recursive($dice->getRule($rule['instanceOf']), $rule);
+        //Allow substitutions rules to be defined with a leading a slash
+        if (isset($rule['substitutions'])) foreach($rule['substitutions'] as $key => $value) $rule['substitutions'][ltrim($key,  '\\')] = $value;
+        //Clear any existing instance or cache for this class
+        unset($dice->instances[$name], $dice->cache[$name]);
+        $dice->rules[ltrim(strtolower($name), '\\')] = array_replace_recursive($dice->getRule($name), $rule);
+    }
 
 	/**
 	 * Returns the rule that will be applied to the class $name when calling create()
@@ -139,7 +139,7 @@ class Dice {
 		};
 		// When $rule['call'] is set, wrap the closure in another closure which will call the required methods after constructing the object
 		// By putting this in a closure, the loop is never executed unless call is actually set
-		return isset($rule['call']) ? function (array $args, array $share) use ($closure, $class, $rule) {
+		return isset($rule['call']) ? function (array $args, array $share) use ($closure, $class, $rule, $name) {
 			// Construct the object using the original closure
 			$object = $closure($args, $share);
 
@@ -148,7 +148,10 @@ class Dice {
 				$params = $this->getParams($class->getMethod($call[0]), ['shareInstances' => isset($rule['shareInstances']) ? $rule['shareInstances'] : [] ])(($this->expand(isset($call[1]) ? $call[1] : [])));
 				$return = $object->{$call[0]}(...$params);
 				if (isset($call[2])) {
-					if ($call[2] === self::CHAIN_CALL) $object = $return;
+					if ($call[2] === self::CHAIN_CALL) {
+						if (!empty($rule['shared'])) $this->instances[$name] = $return;
+						$object = $return;
+					}
 					else if (is_callable($call[2])) call_user_func($call[2], $return);
 				}
 			}
