@@ -142,7 +142,11 @@ class Dice {
 				$params = $this->getParams($class->getMethod($call[0]), ['shareInstances' => isset($rule['shareInstances']) ? $rule['shareInstances'] : [] ])(($this->expand(isset($call[1]) ? $call[1] : [])));
 				$return = $object->{$call[0]}(...$params);
 				if (isset($call[2])) {
-					if ($call[2] === self::CHAIN_CALL) $object = $return;
+					if ($call[2] === self::CHAIN_CALL) {
+						if (!empty($rule['shared'])) $this->instances[$name] = $return;
+                        			if (is_object($return)) $class = new \ReflectionClass(get_class($return));
+						$object = $return;
+					}
 					else if (is_callable($call[2])) call_user_func($call[2], $return);
 				}
 			}
